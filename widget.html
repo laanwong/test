@@ -96,9 +96,9 @@ if (window !== window.top) {
   window.top.location = window.location.href;
 }
 
-// ✅ CONFIG - Updated for GitHub Pages
+// ✅ CONFIG
 const CLIENT_ID = "W1VpcjRbukITiQXfJk6uNtZhY9SqGoIIaXmufqG02UXla5Cj";
-const REDIRECT_URI = "https://laanwong.github.io/test/widget.html"; // Points back to this page
+const REDIRECT_URI = "https://laanwong.github.io/test/widget.html";
 const SCOPES = "data:read data:write bucket:read";
 
 // Global variables
@@ -107,7 +107,7 @@ let HUBS = [];
 let PROJECTS = [];
 let SELECTED_HUB = null;
 
-// Logging function
+// Logging
 function log(message, type = 'info') {
   const logDiv = document.getElementById('log');
   const timestamp = new Date().toLocaleTimeString();
@@ -124,24 +124,34 @@ function log(message, type = 'info') {
   console.log(`[${type.toUpperCase()}]`, message);
 }
 
-// ✅ PKCE Helpers
-async function generateCodeVerifier() {
-  const array = new Uint32Array(56);
-  crypto.getRandomValues(array);
-  return btoa(String.fromCharCode.apply(null, array))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+// ✅ PKCE Helpers - FIXED
+function generateCodeVerifier() {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const length = 128;
+  let verifier = '';
+  const randomValues = new Uint8Array(length);
+  crypto.getRandomValues(randomValues);
+  for (let i = 0; i < length; i++) {
+    verifier += charset[randomValues[i] % charset.length];
+  }
+  return verifier;
 }
 
-async function sha256(buffer) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(buffer));
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function sha256(plain) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(plain);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  const hashBinary = hashArray.map(b => String.fromCharCode(b)).join('');
+  const base64 = btoa(hashBinary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 // ✅ Start Login
 async function startLogin() {
   log('🔐 Generating PKCE challenge...', 'info');
-  const verifier = await generateCodeVerifier();
+  
+  const verifier = generateCodeVerifier();
   const challenge = await sha256(verifier);
   sessionStorage.setItem("pkce_verifier", verifier);
   
@@ -158,7 +168,7 @@ async function startLogin() {
   window.location.href = authUrl;
 }
 
-// ✅ Exchange auth code for token
+// ✅ Exchange code for token
 async function getToken(code) {
   log('🔄 Exchanging code for access token...', 'info');
   const verifier = sessionStorage.getItem("pkce_verifier");
@@ -187,13 +197,11 @@ async function getToken(code) {
       document.getElementById('btnProjects').disabled = false;
       document.getElementById('btnSearch').disabled = false;
       
-      // Auto-load hubs
       setTimeout(() => loadHubs(), 500);
     } else {
       log("❌ Token exchange failed: " + JSON.stringify(data), 'error');
     }
 
-    // Clean URL
     window.history.replaceState({}, document.title, window.location.pathname);
   } catch (error) {
     log("❌ Error: " + error.message, 'error');
@@ -225,13 +233,13 @@ async function loadHubs() {
       displayHubs();
     } else {
       log('❌ No hubs found', 'error');
+      console.log('Response:', data);
     }
   } catch (error) {
     log('❌ Error loading hubs: ' + error.message, 'error');
   }
 }
 
-// Display Hubs
 function displayHubs() {
   const resultsDiv = document.getElementById('results');
   let html = '<div class="section"><h3>📊 Available Hubs</h3>';
@@ -250,7 +258,6 @@ function displayHubs() {
   resultsDiv.innerHTML = html;
 }
 
-// Select Hub
 function selectHub(hubId) {
   SELECTED_HUB = hubId;
   const hub = HUBS.find(h => h.id === hubId);
@@ -258,7 +265,6 @@ function selectHub(hubId) {
   loadProjects();
 }
 
-// ✅ Load Projects
 async function loadProjects() {
   if (!SELECTED_HUB) {
     log('❌ Please select a hub first', 'warning');
@@ -287,7 +293,6 @@ async function loadProjects() {
   }
 }
 
-// Display Projects
 function displayProjects() {
   const resultsDiv = document.getElementById('results');
   let html = '<div class="section"><h3>📁 Available Projects</h3>';
@@ -306,7 +311,6 @@ function displayProjects() {
   resultsDiv.innerHTML = html;
 }
 
-// ✅ Search by project name
 async function searchFiles() {
   const searchName = document.getElementById("pname").value.trim().toLowerCase();
   
@@ -335,7 +339,6 @@ async function searchFiles() {
   getFiles(matches[0].id);
 }
 
-// ✅ Get Files from Project
 async function getFiles(projectId) {
   if (!TOKEN || !SELECTED_HUB) {
     log('❌ Missing token or hub', 'error');
@@ -346,7 +349,6 @@ async function getFiles(projectId) {
   log(`📂 Getting files from: ${project.attributes.name}`, 'info');
   
   try {
-    // Get top folders
     const foldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${SELECTED_HUB}/projects/${projectId}/topFolders`;
     const foldersResp = await fetch(foldersUrl, {
       headers: { 'Authorization': `Bearer ${TOKEN}` }
@@ -362,7 +364,6 @@ async function getFiles(projectId) {
     const folderId = folders.data[0].id;
     log(`📁 Reading folder: ${folders.data[0].attributes.name}`, 'info');
     
-    // Get folder contents
     const filesUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${folderId}/contents`;
     const filesResp = await fetch(filesUrl, {
       headers: { 'Authorization': `Bearer ${TOKEN}` }
@@ -381,7 +382,6 @@ async function getFiles(projectId) {
   }
 }
 
-// Display Files
 function displayFiles(files, projectName) {
   const resultsDiv = document.getElementById('results');
   let html = `<div class="section"><h3>📄 First 10 Items in ${projectName}</h3>`;
@@ -401,7 +401,6 @@ function displayFiles(files, projectName) {
   resultsDiv.innerHTML = html;
 }
 
-// ✅ Handle callback on page load
 window.onload = () => {
   log('✨ Widget loaded', 'info');
   
@@ -411,7 +410,6 @@ window.onload = () => {
   if (code) {
     getToken(code);
   } else {
-    // Check if we have a stored token
     TOKEN = sessionStorage.getItem("acc_token");
     if (TOKEN) {
       log('✅ Found existing token', 'success');
