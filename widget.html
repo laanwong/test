@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ACC File Search Widget</title>
+<meta charset="UTF-8">
+<script>
+
+// ✅ Break out of iframe (GitHub Pages / W3Schools issue)
+if (window !== window.top) {
+  window.top.location = window.location.href;
+}
+
+// ✅ CONFIG
+const CLIENT_ID = "W1VpcjRbukITiQXfJk6uNtZhY9SqGoIIaXmufqG02UXla5Cj";
+const REDIRECT_URI = window.location.origin + "/test/callback.html"; // update if repo name changes
+const SCOPES = "data:read data:search";
+
+// ✅ PKCE Helpers
+async function generateCodeVerifier() {
+  const array = new Uint32Array(56);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array));
+}
+async function sha256(buffer) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(buffer));
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function startLogin() {
+  const verifier = await generateCodeVerifier();
+  const challenge = await sha256(verifier);
+  localStorage.setItem("pkce_verifier", verifier);
+
+  const authUrl = `https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&code_challenge=${challenge}&code_challenge_method=S256`;
+  window.location.href = authUrl;
+}
+
+// ✅ Exchange auth code for token
+async function getToken(code) {
+  const verifier = localStorage.getItem("pkce_verifier");
+
+  const response = await fetch("https://developer.api.autodesk.com/authentication/v2/token", {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: CLIENT_ID,
+      code: code,
+      code_verifier: verifier,
+      redirect_uri: REDIRECT_URI
+    })
+  });
+
+  const data = await response.json();
+  localStorage.setItem("acc_token", data.access_token);
+  console.log("[✅] Token received:", data);
+  alert("✅ Login success. You can now search.");
+
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+// ✅ Search ACC project → get hub & project ID
+async function searchProject(name, token) {
+  const res = await fetch(`https://developer.api.autodesk.com/project/v1/search?field=projectName&value=${name}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json();
+
+  if (!data.results.length) throw new Error("Project not found");
+
+  return data.results[0];
+}
+
+// ✅ List files in project (first 10)
+async function listFiles(hubId, projectId, token) {
+  const res = await fetch(`https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/root/contents?page[limit]=10`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json();
+  return data.data || [];
+}
+
+// ✅ UI Handler
+async function searchFiles() {
+  const name = document.getElementById("pname").value;
+  if (!name) return alert("Enter project name");
+
+  const token = localStorage.getItem("acc_token");
+  if (!token) return alert("Login first!");
+
+  try {
+    console.log("[ℹ] Searching project:", name);
+
+    const proj = await searchProject(name, token);
+    console.log("[✅] Project:", proj);
+
+    const files = await listFiles(proj.hubId, proj.projectId, token);
+    console.log("[📄] Files:", files);
+
+    const list = document.getElementById("results");
+    list.innerHTML = files
+      .map(f => `<li>${f.attributes.displayName}</li>`)
+      .join("");
+  } catch (e) {
+    alert("❌ " + e.message);
+    console.error(e);
+  }
+}
+
+// ✅ Handle callback
+window.onload = () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  if (code) getToken(code);
+};
+
+</script>
+</head>
+
+<body style="font-family:Arial; padding:20px;">
+<h2>ACC File Search Test</h2>
+
+<button onclick="startLogin()">🔐 Login to Autodesk</button>
+<br><br>
+
+<input id="pname" placeholder="Enter ACC project name (e.g. HANWHA)" style="padding:8px; width:250px;">
+<button onclick="searchFiles()">Search Files</button>
+
+<h3>Results:</h3>
+<ul id="results"></ul>
+</body>
+</html>
