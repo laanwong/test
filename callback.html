@@ -1,3 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Authenticating...</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding: 50px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0696d7;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+<h2>🔐 Authenticating...</h2>
+<div class="spinner"></div>
+<p>Completing login process...</p>
+
 <script>
-window.location.href = "yourwidget.html" + window.location.hash;
+// Extract code from URL
+const params = new URLSearchParams(window.location.search);
+const code = params.get('code');
+const error = params.get('error');
+
+if (code) {
+  // Send code back to parent window (the widget)
+  if (window.opener) {
+    window.opener.postMessage({
+      type: 'oauth-callback',
+      code: code
+    }, '*');
+    
+    // Show success message
+    document.body.innerHTML = `
+      <h2>✅ Authentication Successful!</h2>
+      <p>You can close this window now.</p>
+      <script>setTimeout(() => window.close(), 2000);<\/script>
+    `;
+  } else {
+    document.body.innerHTML = '<h2>❌ Error</h2><p>Could not communicate with parent window.</p>';
+  }
+} else if (error) {
+  document.body.innerHTML = `<h2>❌ Authentication Failed</h2><p>${error}</p>`;
+} else {
+  document.body.innerHTML = '<h2>❌ No Code Received</h2><p>Authorization failed.</p>';
+}
 </script>
+</body>
+</html>
